@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>1D Radial Lightmap Test — 本地复刻</title>
+<!--
+  本地复刻自 Shadertoy:
+    "1D Radial Lightmap Test" — 作者 Flyguy
+    https://www.shadertoy.com/view/XsK3RR
+  着色器源码版权归原作者所有，遵循 Shadertoy 默认许可协议 CC BY-NC-SA 3.0。
+  仅供个人学习使用，请勿商用。
+
+  说明: 下方的着色器源码保持与原作逐字一致。
+  参数面板通过运行时注入 uniform 与定点替换实现，未直接改动源码本体。
+-->
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+  #panel {
+    position: absolute; top: 12px; left: 12px; z-index: 10;
+    max-width: 340px; padding: 12px 14px;
+    background: rgba(10, 12, 18, 0.78); color: #cfd3dc;
+    font: 12px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+    backdrop-filter: blur(6px); user-select: none;
+  }
+  #panel h1 { margin: 0 0 2px; font-size: 15px; color: #fff; font-weight: 600; }
+  #panel .by { color: #8fa3c8; }
+  #panel a { color: #6cb6ff; text-decoration: none; }
+  #panel a:hover { text-decoration: underline; }
+  #panel .lic { color: #6b7280; margin-top: 4px; }
+  #panel .keys { margin-top: 8px; color: #9aa4b2; }
+  #panel .keys b {
+    display: inline-block; padding: 0 5px; margin: 0 2px;
+    background: #23283a; border-radius: 4px; color: #dfe6f3;
+    font: 11px/1.6 ui-monospace, monospace;
+  }
+
+  /* 参数面板 */
+  #params {
+    position: absolute; top: 12px; right: 12px; z-index: 10;
+    width: 272px; max-height: calc(100% - 24px); overflow-y: auto;
+    padding: 12px 14px; box-sizing: border-box;
+    background: rgba(10, 12, 18, 0.82); color: #cfd3dc;
+    font: 12px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+    backdrop-filter: blur(6px); user-select: none;
+  }
+  #params h2 { margin: 0 0 6px; font-size: 14px; color: #fff; font-weight: 600; }
+  #params .grp { margin: 10px 0; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); }
+  #params .grp > .ttl { color: #8fa3c8; font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; }
+  #params label { display: flex; align-items: center; gap: 8px; margin: 6px 0; color: #b9c0cc; }
+  #params label .name { flex: 0 0 58px; }
+  #params label .val { flex: 0 0 38px; text-align: right; color: #7d8593;
+    font: 11px ui-monospace, Menlo, monospace; }
+  #params input[type="range"] { flex: 1; accent-color: #6cb6ff; height: 14px; }
+  #params input[type="color"] { width: 40px; height: 22px; padding: 0; border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px; background: none; cursor: pointer; }
+  #params .lightrow { display: flex; align-items: center; gap: 8px; margin: 5px 0; color: #b9c0cc; }
+  #params .lightrow .idx { flex: 0 0 34px; color: #8fa3c8; }
+  #params .lightrow input[type="color"] { width: 34px; height: 20px; }
+  #params .lightrow input[type="range"] { flex: 1; }
+  #params .lightrow .val { flex: 0 0 34px; text-align: right; color: #7d8593;
+    font: 11px ui-monospace, Menlo, monospace; }
+  #params button {
+    width: 100%; margin-top: 10px; padding: 6px 0;
+    background: #23283a; color: #dfe6f3; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px; cursor: pointer; font: 12px -apple-system, "PingFang SC", sans-serif;
+  }
+  #params button:hover { background: #2d3450; }
+
+  #hud {
+    position: absolute; left: 12px; bottom: 12px; z-index: 10;
+    padding: 4px 10px; background: rgba(10,12,18,0.7); color: #9aa4b2;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);
+    user-select: none; pointer-events: none;
+  }
+  #err {
+    position: absolute; inset: 0; display: none; z-index: 20;
+    color: #f88; font: 14px/1.8 -apple-system, "PingFang SC", sans-serif;
+    padding: 40px; white-space: pre-wrap;
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="panel">
+  <h1>1D Radial Lightmap Test</h1>
+  <div class="by">原作 <b>Flyguy</b> ·
+    <a href="https://www.shadertoy.com/view/XsK3RR" target="_blank" rel="noopener">shadertoy.com/view/XsK3RR</a>
+  </div>
+  <div class="lic">本地复刻仅供学习 · CC BY-NC-SA 3.0</div>
+  <div class="keys">
+    操作提示：<b>拖动鼠标</b>移动光源
+    <b>Space</b>暂停 <b>R</b>重置 <b>F</b>全屏 <b>S</b>截图 <b>P</b>参数面板 <b>H</b>隐藏全部面板
+  </div>
+</div>
+
+<div id="params">
+  <h2>参数调节</h2>
+  <div class="grp"><div class="ttl">场景</div>
+    <label><span class="name">墙色</span><input type="color" id="wall"></label>
+    <label><span class="name">地色</span><input type="color" id="floor"></label>
+    <label><span class="name">环境光</span><input type="range" id="ambient"><span class="val" id="ambient_v"></span></label>
+  </div>
+  <div class="grp"><div class="ttl">光照</div>
+    <label><span class="name">光强增益</span><input type="range" id="gain"><span class="val" id="gain_v"></span></label>
+    <label><span class="name">阴影柔度</span><input type="range" id="soft"><span class="val" id="soft_v"></span></label>
+    <label><span class="name">动画速度</span><input type="range" id="speed"><span class="val" id="speed_v"></span></label>
+  </div>
+  <div class="grp"><div class="ttl">蝴蝶</div>
+    <label><span class="name">显示蝴蝶</span><input type="checkbox" id="bflyOn" style="accent-color:#6cb6ff; transform:scale(1.2)"></label>
+    <label><span class="name">颜色</span><input type="color" id="bflyColor"></label>
+    <label><span class="name">大小</span><input type="range" id="bflySize"><span class="val" id="bflySize_v"></span></label>
+    <label><span class="name">扑翼频率</span><input type="range" id="bflyFlap"><span class="val" id="bflyFlap_v"></span></label>
+    <label><span class="name">飞行速度</span><input type="range" id="bflySpeed"><span class="val" id="bflySpeed_v"></span></label>
+    <label><span class="name">飞行范围</span><input type="range" id="bflyRange"><span class="val" id="bflyRange_v"></span></label>
+  </div>
+  <div class="grp"><div class="ttl">光源（颜色 / 亮度倍率，0 = 关闭）</div>
+    <div id="lights"></div>
+  </div>
+  <button id="reset">重置全部参数</button>
+</div>
+
+<div id="hud"></div>
+<div id="err"></div>
+
+<script>
+"use strict";
+
+// ============================================================
+// 着色器源码(逐字提取自原作，未做任何修改)
+// ============================================================
+
+const BUFFER_A_SRC = `//1D Distance field shadow map.
+//Each row is a radial shadow map for a light.
+//r = distance
+//gba = light info (position / color)
+
+#define MAX_STEPS 48
+#define INF 1e8
+#define EPS 1e-4
+float tau = atan(1.0)*8.0;
+
+//Globals
+vec2 res = vec2(0);
+vec2 mouse = vec2(0);
+
+// Shapes
+float sdCircle(float r, vec2 uv)
+{
+	return length(uv) - r;   
+}
+
+float sdRing(float ir, float or, vec2 uv)
+{
+	return abs(length(uv) - (ir+or)/2.0) - (or - ir);   
+}
+
+float sdBox(float s, vec2 uv)
+{
+	return max(abs(uv.x), abs(uv.y)) - s;   
+}
+
+float sdRect(vec2 s, vec2 uv)
+{
+    uv = abs(uv) - s;
+	return max(uv.x, uv.y);
+}
+
+float sdPlane(vec2 dir, vec2 uv)
+{
+	return dot(normalize(dir), uv);   
+}
+
+// Operations
+float opU(float a, float b)
+{
+	return min(a, b);   
+}
+
+float opI(float a, float b)
+{
+	return max(a, b);   
+}
+
+float opS(float a, float b)
+{
+	return max(-a, b);   
+}
+
+//Domain modifiers
+mat2 Rotate(float a)
+{
+	return mat2(cos(a), sin(a),-sin(a), cos(a));   
+}
+
+vec2 Rep1(vec2 uv, float r)
+{
+	uv.x = mod(uv.x, r) - r/2.0;
+    return uv;
+}
+
+vec2 Rep2(vec2 uv, vec2 r)
+{
+	return mod(uv, r) - r/2.0;  
+}
+
+// Scene function (must be changed in both tabs)
+float Scene(vec2 uv)
+{
+	float d = -sdRect(res/2.0 - 0.05, uv);
+    
+    vec2 rp = Rep2(uv, vec2(0.2));
+    
+    d = opU(sdCircle(0.02, rp), d);
+    
+    rp = Rep1(uv, 0.2);
+    
+    d = opU(sdRect(vec2(0.005,0.1), rp), d);
+    
+    d = opS(sdBox(0.2, uv), d);
+    
+    d = opU(sdRing(0.08, 0.09, uv), d);
+    
+    d = opS(sdRect(vec2(0.11,0.03), uv * Rotate(iTime)), d);
+    
+    return d;
+}
+
+float MarchShadow(vec2 orig, vec2 dir)
+{
+    float d = 0.0;
+    
+    for(int i = 0;i < MAX_STEPS;i++)
+    {
+        float ds = Scene(dir * d - orig);
+        
+        d += ds;
+        
+        if(ds < EPS)
+        {
+        	break;   
+        }
+    }
+    
+    return d;
+}
+
+//Data slots
+#define SLOT_POSITION 0
+#define SLOT_COLOR 1
+
+struct Light
+{
+	vec2 origin;
+    vec3 color;
+    float brightness;
+    
+};
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    res = iResolution.xy / iResolution.y;  
+    mouse = iMouse.xy / iResolution.y - res/2.0;
+    
+    float a = (fragCoord.x / iResolution.x) * tau;
+    vec2 dir = vec2(cos(a), sin(a));
+    
+    int id = int(fragCoord.y);
+    
+    Light light;
+    
+    light.origin = vec2(0);
+    light.color = vec3(0);
+    light.brightness = 0.0;
+    
+    if(id == 0)
+    {
+    	light.origin = vec2(0);
+        light.color = vec3(1.0, 0.2, 0.2);
+        light.brightness = sin(iTime * 4.0) * 2.0 + 2.0;
+    }
+    
+    if(id == 1)
+    {
+    	light.origin = mouse;
+        light.color = vec3(1.0, 0.6, 0.6);
+        light.brightness = 2.0;
+    }
+    if(id == 2)
+    {
+    	light.origin = -mouse;
+        light.color = vec3(0.6, 1.0, 0.6);
+        light.brightness = 2.0;
+    }
+    if(id == 3)
+    {
+        float a = -iTime * 0.3;
+    	light.origin = vec2(cos(a), sin(a)) * 0.2; 
+        light.color = vec3(0.4, 0.4, 1.0);
+        light.brightness = 4.0;
+    }
+    if(id == 4)
+    {
+    	light.origin = vec2(0.4, sin(3.0*iTime-tau/4.0)*0.2); 
+        light.color = vec3(1.0, 1.0, 0.4);
+        light.brightness = 1.0;
+    }
+    if(id == 5)
+    {
+    	light.origin = vec2(-0.4, sin(3.0*iTime)*0.2); 
+        light.color = vec3(1.0, 0.4, 1.0);
+        light.brightness = 1.0;
+    }
+    
+    int slot = int(fragCoord.x);
+    vec3 data = vec3(0);
+    
+    if(slot == SLOT_POSITION)
+    {
+        data = vec3(light.origin,0);
+    }
+    
+    if(slot == SLOT_COLOR)
+    {
+    	data = light.brightness * light.color;   
+    }
+    
+    float dist = MarchShadow(light.origin, dir);
+     
+	fragColor = vec4(dist, data);
+}`;
+
+const IMAGE_SRC = `#define NUM_LIGHTS 6
+#define WALL_COLOR vec3(1.0, 0.5, 0.1)
+#define FLOOR_COLOR vec3(0.4, 0.4, 0.4)
+#define AMBIENT_LIGHT vec3(0.1, 0.1, 0.1)
+//#define SHOW_SHADOWMAP
+
+#define INF 1e8
+#define EPS 1e-3
+float tau = atan(1.0)*8.0;
+
+//Globals
+vec2 res = vec2(0); //Y-Normalized resolution
+vec2 mouse = vec2(0); //Mouse coords (form center)
+float psz = 0.0; //Pixel size
+vec2 hpo = vec2(0); //Half pixel offset
+
+// Shapes
+float sdCircle(float r, vec2 uv)
+{
+	return length(uv) - r;   
+}
+
+float sdRing(float ir, float or, vec2 uv)
+{
+	return abs(length(uv) - (ir+or)/2.0) - (or - ir);   
+}
+
+float sdBox(float s, vec2 uv)
+{
+	return max(abs(uv.x), abs(uv.y)) - s;   
+}
+
+float sdRect(vec2 s, vec2 uv)
+{
+    uv = abs(uv) - s;
+	return max(uv.x, uv.y);
+}
+
+float sdPlane(vec2 dir, vec2 uv)
+{
+	return dot(normalize(dir), uv);   
+}
+
+// Operations
+float opU(float a, float b)
+{
+	return min(a, b);   
+}
+
+float opI(float a, float b)
+{
+	return max(a, b);   
+}
+
+float opS(float a, float b)
+{
+	return max(-a, b);   
+}
+
+//Domain modifiers
+mat2 Rotate(float a)
+{
+	return mat2(cos(a), sin(a),-sin(a), cos(a));   
+}
+
+vec2 Rep1(vec2 uv, float r)
+{
+	uv.x = mod(uv.x, r) - r/2.0;
+    return uv;
+}
+
+vec2 Rep2(vec2 uv, vec2 r)
+{
+	return mod(uv, r) - r/2.0;  
+}
+
+// Scene function (must be changed in both tabs)
+float Scene(vec2 uv)
+{
+	float d = -sdRect(res/2.0 - 0.05, uv);
+    
+    vec2 rp = Rep2(uv, vec2(0.2));
+    
+    d = opU(sdCircle(0.02, rp), d);
+    
+    rp = Rep1(uv, 0.2);
+    
+    d = opU(sdRect(vec2(0.005,0.1), rp), d);
+    
+    d = opS(sdBox(0.2, uv), d);
+    
+    d = opU(sdRing(0.08, 0.09, uv), d);
+    
+    d = opS(sdRect(vec2(0.11,0.03), uv * Rotate(iTime)), d);
+    
+    return d;
+}
+
+vec2 LightOrigin(int id)
+{
+	return texture(iChannel0,vec2(0, float(id))/iResolution.xy + hpo).yz;   
+}
+
+vec3 LightColor(int id)
+{
+	return texture(iChannel0,vec2(1, float(id))/iResolution.xy + hpo).yzw;   
+}
+
+float SampleShadow(int id, vec2 uv)
+{
+    float a = atan(uv.y, uv.x)/tau + 0.5;
+    float r = length(uv);
+    
+    float idn = float(id)/iResolution.y;
+    
+    float s = texture(iChannel0, vec2(a, idn) + hpo).x;
+    
+    return 1.0-smoothstep(s, s+0.02, length(uv));   
+}
+
+//Reads lights from light buffer and combines them.
+vec3 MixLights(vec2 uv)
+{
+    vec3 b = AMBIENT_LIGHT;
+    
+	for(int i = 0;i < NUM_LIGHTS;i++)
+    {
+        vec2 o = LightOrigin(i);
+        vec3 c = LightColor(i);
+        
+        float l = 0.01 / pow(length(vec3(uv - o, 0.1)), 2.0);
+        l *= SampleShadow(i, uv-o);
+        b += c * l;
+    }
+    
+    return b;
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    hpo = 0.5 / iResolution.xy;
+    res = iResolution.xy / iResolution.y;
+    psz = 1.0 / iResolution.y;
+	vec2 uv = fragCoord.xy / iResolution.y - res/2.0;
+    
+    mouse = iMouse.xy / iResolution.y - res/2.0;
+    
+    vec3 col = vec3(0);
+    
+    float d = Scene(uv);
+    
+    col = mix(FLOOR_COLOR, WALL_COLOR, smoothstep(psz, 0.0, d));
+    
+    col *= MixLights(uv);
+    
+    #ifdef SHOW_SHADOWMAP
+    col = texture(iChannel0, fragCoord/iResolution.xy).rgb;
+    #endif
+    
+	fragColor = vec4(col, 1.0);
+}`;
+
+// ============================================================
+// 参数定义(默认值 = 原作行为)
+// ============================================================
+
+const DEFAULTS = {
+  wall: "#ff801a",        // WALL_COLOR vec3(1.0, 0.5, 0.1)
+  floor: "#666666",       // FLOOR_COLOR vec3(0.4, 0.4, 0.4)
+  ambient: 0.1,           // AMBIENT_LIGHT 0.1
+  gain: 0.01,             // MixLights 里的 0.01
+  soft: 0.02,             // SampleShadow 里的 0.02
+  speed: 1.0,             // 动画时间倍率(仅 JS 侧)
+  lightColors: [
+    "#ff3333", // 光源0 vec3(1.0, 0.2, 0.2)
+    "#ff9999", // 光源1 vec3(1.0, 0.6, 0.6)
+    "#99ff99", // 光源2 vec3(0.6, 1.0, 0.6)
+    "#6666ff", // 光源3 vec3(0.4, 0.4, 1.0)
+    "#ffff66", // 光源4 vec3(1.0, 1.0, 0.4)
+    "#ff66ff", // 光源5 vec3(1.0, 0.4, 1.0)
+  ],
+  lightBrightness: [1, 1, 1, 1, 1, 1], // 亮度倍率
+  bflyOn: true,           // 蝴蝶开关
+  bflyColor: "#8a5fd8",   // 蝴蝶颜色
+  bflySize: 1.2,          // 蝴蝶大小
+  bflyFlap: 6.0,          // 扑翼频率
+  bflySpeed: 1.0,         // 飞行速度
+  bflyRange: 1.0,         // 飞行范围
+};
+const P = JSON.parse(JSON.stringify(DEFAULTS));
+P.lightColors = DEFAULTS.lightColors.slice();
+P.lightBrightness = DEFAULTS.lightBrightness.slice();
+
+// ============================================================
+// 运行时注入：把参数接进着色器(源码本体不动，只做定点替换)
+// ============================================================
+
+function mustReplace(src, needle, replacement, tag) {
+  if (!src.includes(needle)) throw new Error("源码锚点缺失: " + tag);
+  return src.replace(needle, replacement);
+}
+
+// Buffer A: 光源颜色/亮度改由 uniform 控制(仅前 6 行，其余行保持原样熄灭)
+let bufferASource = BUFFER_A_SRC;
+bufferASource = mustReplace(bufferASource, "#define MAX_STEPS 48",
+`uniform vec3  uLightColors[6];
+uniform float uLightBrightness[6];
+#define MAX_STEPS 48`, "bufferA uniforms");
+bufferASource = mustReplace(bufferASource, "int slot = int(fragCoord.x);",
+`if(id >= 0 && id < 6)
+    {
+        light.color = uLightColors[id];
+        light.brightness *= uLightBrightness[id];
+    }
+    
+    int slot = int(fragCoord.x);`, "bufferA override");
+
+// Image: 墙/地/环境光/光强增益/阴影柔度改由 uniform 控制
+let imageSource = IMAGE_SRC;
+imageSource = mustReplace(imageSource, "#define NUM_LIGHTS 6",
+`uniform vec3  uWallColor;
+uniform vec3  uFloorColor;
+uniform float uAmbient;
+uniform float uShadowSoft;
+uniform float uLightGain;
+#define NUM_LIGHTS 6`, "image uniforms");
+imageSource = mustReplace(imageSource, "#define WALL_COLOR vec3(1.0, 0.5, 0.1)",
+  "#define WALL_COLOR (uWallColor)", "wall");
+imageSource = mustReplace(imageSource, "#define FLOOR_COLOR vec3(0.4, 0.4, 0.4)",
+  "#define FLOOR_COLOR (uFloorColor)", "floor");
+imageSource = mustReplace(imageSource, "#define AMBIENT_LIGHT vec3(0.1, 0.1, 0.1)",
+  "#define AMBIENT_LIGHT (vec3(uAmbient))", "ambient");
+imageSource = mustReplace(imageSource, "return 1.0-smoothstep(s, s+0.02, length(uv));",
+  "return 1.0-smoothstep(s, s+uShadowSoft, length(uv));", "soft");
+imageSource = mustReplace(imageSource, "float l = 0.01 / pow(length(vec3(uv - o, 0.1)), 2.0);",
+  "float l = uLightGain / pow(length(vec3(uv - o, 0.1)), 2.0);", "gain");
+
+// ----- 蝴蝶(本地新增): 注入两个 pass 的 Scene()，画面与阴影图保持一致 -----
+const BUTTERFLY_GLSL = `uniform float uButterflyOn;
+uniform vec3  uBFlyColor;
+uniform float uBFlySize;
+uniform float uBFlyFlap;
+uniform float uBFlySpeed;
+uniform float uBFlyRange;
+
+// 飞行路径: xy 为横穿场景的往返轨迹, z 为伪深度(>0 靠近, <0 远去)
+vec3 bPath(float t)
+{
+    t *= uBFlySpeed;
+    float x = sin(t * 0.55) * 0.62;
+    float y = sin(t * 1.30 + 1.1) * 0.16 + sin(t * 0.35) * 0.10;
+    float z = sin(t * 0.55 + 1.2);
+    return uBFlyRange * vec3(x, y, z);
+}
+
+float sdButterfly(vec2 uv)
+{
+    vec3 P0 = bPath(iTime);
+    vec3 P1 = bPath(iTime - 0.06);
+    vec2 p0 = P0.xy, p1 = P1.xy;
+    float ang = atan(p0.y - p1.y + 1e-6, p0.x - p1.x + 1e-5);
+    // 伪深度缩放: 0.5(远,小) ~ 1.6(近,大)，制造前后穿梭感
+    float depth = mix(0.5, 1.6, 0.5 + 0.5 * P0.z);
+    float scale = uBFlySize * depth;
+    vec2 loc = (uv - p0) * Rotate(1.5708 - ang) / scale;
+    // 扑翼: 恒定频率的平滑余弦摆动(均匀)
+    float f = 0.725 + 0.275 * cos(iTime * uBFlyFlap);
+    vec2 q = vec2(abs(loc.x), loc.y);
+    float dWing = length(q - vec2(0.078*f, 0.050)) - 0.060*f;
+    dWing = opU(dWing, length(q - vec2(0.058*f, -0.036)) - 0.042*f);
+    dWing = opS(length(q - vec2(0.080*f, 0.054)) - 0.013*f, dWing);
+    float d = opU(dWing, sdRect(vec2(0.006, 0.024), loc));
+    d = opU(d, length(loc - vec2(0.0, 0.028)) - 0.011);
+    return scale * d;
+}
+
+`;
+bufferASource = mustReplace(bufferASource, "// Scene function (must be changed in both tabs)",
+  BUTTERFLY_GLSL + "// Scene function (must be changed in both tabs)", "butterfly globals");
+imageSource = mustReplace(imageSource, "// Scene function (must be changed in both tabs)",
+  BUTTERFLY_GLSL + "// Scene function (must be changed in both tabs)", "butterfly globals");
+
+const SCENE_TAIL = "d = opS(sdRect(vec2(0.11,0.03), uv * Rotate(iTime)), d);";
+const SCENE_BFLY = "\n    \n    if(uButterflyOn > 0.5)\n    {\n        d = opU(sdButterfly(uv), d);\n    }";
+// 只有 Buffer A 的 Scene() 并入蝴蝶(让阴影照常投射);
+// Image 里蝴蝶从场景中拆出、按深度独立合成，才能与柱子/圆环产生前后遮挡
+bufferASource = mustReplace(bufferASource, SCENE_TAIL, SCENE_TAIL + SCENE_BFLY, "butterfly scene");
+
+// Image: 在场景着色之后按深度合成蝴蝶
+const IMG_ANCHOR = "col *= MixLights(uv);";
+const IMG_COMPOSITE = `col *= MixLights(uv);
+
+    // 蝴蝶独立合成: 远(z<0)时被场景元素遮挡, 近(z>0)时飞到场景前面
+    if(uButterflyOn > 0.5)
+    {
+        float dB = sdButterfly(uv);
+        float bMask = smoothstep(psz, 0.0, dB);
+        if(bMask > 0.001)
+        {
+            vec3 bcol = uBFlyColor * MixLights(uv);
+            float front = smoothstep(-0.35, 0.35, bPath(iTime).z);
+            float sMask = smoothstep(psz, 0.0, d);
+            vec3 behind  = mix(bcol, col, sMask);
+            vec3 infront = mix(col, bcol, bMask);
+            col = mix(behind, infront, front);
+        }
+    }`;
+imageSource = mustReplace(imageSource, IMG_ANCHOR, IMG_COMPOSITE, "butterfly composite");
+
+// ============================================================
+// WebGL 播放器(模拟 Shadertoy 运行环境)
+// ============================================================
+
+const VS_SRC = `#version 300 es
+layout(location=0) in vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+// Shadertoy 风格的片元着色器头(WebGL2 / GLSL ES 3.00)
+const FS_HEADER = `#version 300 es
+precision highp float;
+precision highp int;
+out vec4 outColor;
+uniform vec3      iResolution;
+uniform float     iTime;
+uniform float     iTimeDelta;
+uniform float     iFrameRate;
+uniform int       iFrame;
+uniform float     iChannelTime[4];
+uniform vec4      iMouse;
+uniform vec4      iDate;
+uniform float     iSampleRate;
+uniform vec3      iChannelResolution[4];
+uniform sampler2D iChannel0;
+`;
+
+function makePassSource(userSrc) {
+  return FS_HEADER + userSrc + "\nvoid main(){ mainImage(outColor, gl_FragCoord.xy); }";
+}
+
+const canvas = document.getElementById("c");
+const errBox = document.getElementById("err");
+const hud = document.getElementById("hud");
+const panel = document.getElementById("panel");
+const paramsPanel = document.getElementById("params");
+
+function fail(msg) {
+  errBox.textContent = msg;
+  errBox.style.display = "block";
+  throw new Error(msg);
+}
+
+const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: true });
+if (!gl) fail("此浏览器不支持 WebGL2，无法运行。");
+
+// 渲染到浮点纹理需要此扩展(WebGL2)
+let bufferInternalFormat = gl.RGBA32F, bufferType = gl.FLOAT;
+if (!gl.getExtension("EXT_color_buffer_float")) {
+  if (gl.getExtension("EXT_color_buffer_half_float")) {
+    bufferInternalFormat = gl.RGBA16F; bufferType = gl.HALF_FLOAT;
+  } else {
+    fail("浏览器不支持渲染到浮点纹理(EXT_color_buffer_float)。");
+  }
+}
+gl.getExtension("OES_texture_float_linear"); // 可选
+
+function compile(type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    fail("着色器编译失败:\n" + gl.getShaderInfoLog(sh));
+  }
+  return sh;
+}
+
+function makeProgram(userSrc) {
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS_SRC));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, makePassSource(userSrc)));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    fail("程序链接失败:\n" + gl.getProgramInfoLog(prog));
+  }
+  return prog;
+}
+
+const progBufferA = makeProgram(bufferASource);
+const progImage = makeProgram(imageSource);
+
+// 全屏三角形
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+// Buffer A 的 ping-pong 纹理(RGBA32F，与 Shadertoy 的 buffer 一致)
+let bufTex = [null, null], bufFbo = [null, null], bufWrite = 0;
+
+function createBufferTextures(w, h) {
+  for (let i = 0; i < 2; i++) {
+    if (bufTex[i]) gl.deleteTexture(bufTex[i]);
+    if (bufFbo[i]) gl.deleteFramebuffer(bufFbo[i]);
+    bufTex[i] = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, bufTex[i]);
+    // 与 Shadertoy 采样 buffer 的方式一致: NEAREST + CLAMP
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, bufferInternalFormat, w, h, 0, gl.RGBA, bufferType, null);
+    bufFbo[i] = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bufFbo[i]);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, bufTex[i], 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      fail("帧缓冲不完整(浮点纹理不可渲染)。");
+    }
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// ---------- Shadertoy 风格的 iMouse ----------
+// xy: 当前位置(像素，原点左下)；zw: 按下时为按下起点，松开后为负值
+const mouse = { x: 0, y: 0, oriX: 0, oriY: 0, down: false };
+
+function canvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  const sx = canvas.width / r.width, sy = canvas.height / r.height;
+  return [Math.round((e.clientX - r.left) * sx), Math.round(canvas.height - (e.clientY - r.top) * sy)];
+}
+canvas.addEventListener("pointerdown", (e) => {
+  const [x, y] = canvasPos(e);
+  mouse.down = true; mouse.x = x; mouse.y = y; mouse.oriX = x; mouse.oriY = y;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (e.buttons || mouse.down || e.pointerType === "mouse") {
+    const [x, y] = canvasPos(e);
+    mouse.x = x; mouse.y = y;
+  }
+});
+window.addEventListener("pointerup", () => { mouse.down = false; });
+
+// ---------- 交互控制 ----------
+let iTime = 0, iFrame = 0, paused = false;
+
+window.addEventListener("keydown", (e) => {
+  if (e.code === "Space") { paused = !paused; e.preventDefault(); }
+  else if (e.code === "KeyR") { iTime = 0; iFrame = 0; mouse.x = mouse.y = mouse.oriX = mouse.oriY = 0; mouse.down = false; }
+  else if (e.code === "KeyF") {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  } else if (e.code === "KeyS") {
+    canvas.toBlob((b) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(b);
+      a.download = "1d-radial-lightmap.png";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  } else if (e.code === "KeyP") { paramsPanel.classList.toggle("hidden"); }
+  else if (e.code === "KeyH") {
+    panel.classList.toggle("hidden");
+    hud.classList.toggle("hidden");
+    paramsPanel.classList.toggle("hidden");
+  }
+});
+
+// ---------- 尺寸 ----------
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+function resize() {
+  const w = Math.max(1, Math.round(canvas.clientWidth * DPR));
+  const h = Math.max(1, Math.round(canvas.clientHeight * DPR));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w; canvas.height = h;
+    createBufferTextures(w, h);
+  }
+}
+window.addEventListener("resize", resize);
+resize();
+
+// ---------- uniform 缓存 ----------
+function uniforms(prog, names) {
+  const u = {};
+  for (const n of names) u[n] = gl.getUniformLocation(prog, n);
+  return u;
+}
+const COMMON_U = ["iResolution", "iTime", "iTimeDelta", "iFrameRate", "iFrame",
+  "iChannelTime[0]", "iMouse", "iDate", "iSampleRate", "iChannelResolution[0]",
+  "uButterflyOn", "uBFlyColor", "uBFlySize", "uBFlyFlap", "uBFlySpeed", "uBFlyRange"];
+const uBuf = uniforms(progBufferA, [...COMMON_U, "uLightColors[0]", "uLightBrightness[0]"]);
+const uImg = uniforms(progImage, [...COMMON_U, "iChannel0",
+  "uWallColor", "uFloorColor", "uAmbient", "uShadowSoft", "uLightGain"]);
+
+// ---------- 颜色工具 ----------
+function hexToRgb(h) {
+  return [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+}
+
+// ---------- 参数面板 ----------
+const $ = (id) => document.getElementById(id);
+
+function bindSlider(id, min, max, step, get, set) {
+  const el = $(id), vEl = $(id + "_v");
+  el.min = min; el.max = max; el.step = step;
+  el.value = get();
+  const refresh = () => { vEl.textContent = Number(el.value).toFixed(step < 0.01 ? 3 : (step < 1 ? 2 : 0)); };
+  refresh();
+  el.addEventListener("input", () => { set(Number(el.value)); refresh(); });
+}
+function bindColor(id, get, set) {
+  const el = $(id);
+  el.value = get();
+  el.addEventListener("input", () => set(el.value));
+}
+
+bindColor("wall", () => P.wall, (v) => P.wall = v);
+bindColor("floor", () => P.floor, (v) => P.floor = v);
+bindSlider("ambient", 0, 0.5, 0.005, () => P.ambient, (v) => P.ambient = v);
+bindSlider("gain", 0, 0.04, 0.001, () => P.gain, (v) => P.gain = v);
+bindSlider("soft", 0.001, 0.15, 0.001, () => P.soft, (v) => P.soft = v);
+bindSlider("speed", 0, 3, 0.05, () => P.speed, (v) => P.speed = v);
+
+$("bflyOn").checked = P.bflyOn;
+$("bflyOn").addEventListener("change", () => P.bflyOn = $("bflyOn").checked);
+bindColor("bflyColor", () => P.bflyColor, (v) => P.bflyColor = v);
+bindSlider("bflySize", 0.4, 2.5, 0.05, () => P.bflySize, (v) => P.bflySize = v);
+bindSlider("bflyFlap", 0, 20, 0.5, () => P.bflyFlap, (v) => P.bflyFlap = v);
+bindSlider("bflySpeed", 0, 3, 0.05, () => P.bflySpeed, (v) => P.bflySpeed = v);
+bindSlider("bflyRange", 0.3, 1.6, 0.05, () => P.bflyRange, (v) => P.bflyRange = v);
+
+const lightRows = [];
+{
+  const box = $("lights");
+  const NAMES = ["0 脉冲", "1 鼠标", "2 镜像", "3 环绕", "4 浮动", "5 浮动"];
+  for (let i = 0; i < 6; i++) {
+    const row = document.createElement("div");
+    row.className = "lightrow";
+    row.innerHTML =
+      `<span class="idx">${NAMES[i]}</span>` +
+      `<input type="color" data-i="${i}" class="lc">` +
+      `<input type="range" data-i="${i}" class="lb" min="0" max="3" step="0.05">` +
+      `<span class="val">1.00</span>`;
+    box.appendChild(row);
+    const cEl = row.querySelector(".lc");
+    const bEl = row.querySelector(".lb");
+    const vEl = row.querySelector(".val");
+    cEl.value = P.lightColors[i];
+    bEl.value = P.lightBrightness[i];
+    cEl.addEventListener("input", () => P.lightColors[i] = cEl.value);
+    bEl.addEventListener("input", () => {
+      P.lightBrightness[i] = Number(bEl.value);
+      vEl.textContent = Number(bEl.value).toFixed(2);
+    });
+    lightRows.push({ cEl, bEl, vEl });
+  }
+}
+
+$("reset").addEventListener("click", () => {
+  P.wall = DEFAULTS.wall; P.floor = DEFAULTS.floor;
+  P.ambient = DEFAULTS.ambient; P.gain = DEFAULTS.gain;
+  P.soft = DEFAULTS.soft; P.speed = DEFAULTS.speed;
+  P.lightColors = DEFAULTS.lightColors.slice();
+  P.lightBrightness = DEFAULTS.lightBrightness.slice();
+  P.bflyOn = DEFAULTS.bflyOn; P.bflyColor = DEFAULTS.bflyColor;
+  P.bflySize = DEFAULTS.bflySize;
+  P.bflyFlap = DEFAULTS.bflyFlap; P.bflySpeed = DEFAULTS.bflySpeed;
+  P.bflyRange = DEFAULTS.bflyRange;
+  $("wall").value = P.wall; $("floor").value = P.floor;
+  $("bflyOn").checked = P.bflyOn;
+  $("bflyColor").value = P.bflyColor;
+  for (const id of ["ambient", "gain", "soft", "speed",
+    "bflySize", "bflyFlap", "bflySpeed", "bflyRange"]) {
+    const el = $(id);
+    el.value = P[id];
+    $(id + "_v").textContent = Number(el.value).toFixed(el.step < 0.01 ? 3 : (el.step < 1 ? 2 : 0));
+  }
+  for (let i = 0; i < 6; i++) {
+    lightRows[i].cEl.value = P.lightColors[i];
+    lightRows[i].bEl.value = P.lightBrightness[i];
+    lightRows[i].vEl.textContent = Number(P.lightBrightness[i]).toFixed(2);
+  }
+});
+
+// ---------- 渲染循环 ----------
+let lastT = performance.now(), fps = 60, lastNow = lastT;
+
+function setCommonUniforms(u, w, h) {
+  gl.uniform3f(u["iResolution"], w, h, 1.0);
+  gl.uniform1f(u["iTime"], iTime);
+  gl.uniform1f(u["iFrameRate"], fps);
+  gl.uniform1i(u["iFrame"], iFrame);
+  gl.uniform4f(u["iMouse"],
+    mouse.x, mouse.y,
+    mouse.down ? mouse.oriX : -Math.abs(mouse.oriX),
+    mouse.down ? mouse.oriY : -Math.abs(mouse.oriY));
+  const d = new Date();
+  gl.uniform4f(u["iDate"], d.getFullYear(), d.getMonth(), d.getDate(),
+    d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000);
+  gl.uniform1f(u["iSampleRate"], 44100);
+  gl.uniform1fv(u["iChannelTime[0]"], [iTime, iTime, iTime, iTime]);
+  gl.uniform3fv(u["iChannelResolution[0]"], [w, h, 1.0]);
+}
+
+function setBflyUniforms(u) {
+  gl.uniform1f(u["uButterflyOn"], P.bflyOn ? 1.0 : 0.0);
+  const bc = hexToRgb(P.bflyColor);
+  gl.uniform3f(u["uBFlyColor"], bc[0], bc[1], bc[2]);
+  gl.uniform1f(u["uBFlySize"], P.bflySize);
+  gl.uniform1f(u["uBFlyFlap"], P.bflyFlap);
+  gl.uniform1f(u["uBFlySpeed"], P.bflySpeed);
+  gl.uniform1f(u["uBFlyRange"], P.bflyRange);
+}
+
+// 页面被遮挡时 rAF 会停止，用定时器兜底保持渲染
+function scheduleNext() {
+  if (document.hidden) setTimeout(() => render(performance.now()), 16);
+  else requestAnimationFrame(render);
+}
+
+function render(now) {
+  scheduleNext();
+  const dt = Math.min((now - lastNow) / 1000, 1.0);
+  lastNow = now;
+  if (!paused) { iTime += dt * P.speed; iFrame++; }
+  fps = fps * 0.9 + (1 / Math.max(dt, 1e-4)) * 0.1;
+
+  resize();
+  const w = canvas.width, h = canvas.height;
+
+  // Pass 1: Buffer A —— 每行一个光源的 1D 径向距离场阴影图
+  const write = bufWrite;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, bufFbo[write]);
+  gl.viewport(0, 0, w, h);
+  gl.useProgram(progBufferA);
+  setCommonUniforms(uBuf, w, h);
+  const lc = new Float32Array(18), lb = new Float32Array(6);
+  for (let i = 0; i < 6; i++) {
+    const c = hexToRgb(P.lightColors[i]);
+    lc[i * 3] = c[0]; lc[i * 3 + 1] = c[1]; lc[i * 3 + 2] = c[2];
+    lb[i] = P.lightBrightness[i];
+  }
+  gl.uniform3fv(uBuf["uLightColors[0]"], lc);
+  gl.uniform1fv(uBuf["uLightBrightness[0]"], lb);
+  setBflyUniforms(uBuf);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  // Pass 2: Image —— 读取 Buffer A(iChannel0)，输出到屏幕
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, w, h);
+  gl.useProgram(progImage);
+  setCommonUniforms(uImg, w, h);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, bufTex[write]);
+  gl.uniform1i(uImg["iChannel0"], 0);
+  const wall = hexToRgb(P.wall), floor = hexToRgb(P.floor);
+  gl.uniform3f(uImg["uWallColor"], wall[0], wall[1], wall[2]);
+  gl.uniform3f(uImg["uFloorColor"], floor[0], floor[1], floor[2]);
+  gl.uniform1f(uImg["uAmbient"], P.ambient);
+  gl.uniform1f(uImg["uShadowSoft"], P.soft);
+  gl.uniform1f(uImg["uLightGain"], P.gain);
+  setBflyUniforms(uImg);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  bufWrite = 1 - write;
+
+  if ((iFrame & 7) === 0) {
+    hud.textContent = `${fps.toFixed(0)} fps · ${w}×${h} · t=${iTime.toFixed(1)}s${paused ? " · 已暂停" : ""}`;
+  }
+}
+
+scheduleNext();
+</script>
+</body>
+</html>
